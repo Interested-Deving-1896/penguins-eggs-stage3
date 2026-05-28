@@ -1,4 +1,4 @@
-name: Build Linux Distro Stage3
+name: Build penguins-eggs Naked Base Images
 
 on:
   workflow_dispatch:
@@ -12,13 +12,17 @@ on:
         required: false
         default: ""
       release:
-        description: "Release (distro-specific, e.g. trixie/noble/rolling/3.21)"
+        description: "Release (e.g. trixie/noble/rolling/3.21)"
         required: false
         default: ""
       tier:
         description: "Max tier to build (1=stable only, 2=+weekly, 3=all)"
         required: false
         default: "1"
+      skip_iso:
+        description: "Skip ISO production (stage3 + eggs install only)"
+        required: false
+        default: "false"
   push:
     branches: [main]
     paths-ignore:
@@ -26,15 +30,14 @@ on:
       - "AGENTS.md"
       - "docs/**"
   schedule:
-    # Tier 1 (stable) — weekly on Monday 02:00 UTC
-    - cron: "0 2 * * 1"
+    # Weekly on Tuesday 03:00 UTC (offset from linux-distro-stage3)
+    - cron: "0 3 * * 2"
 
 concurrency:
-  group: stage3-${{ github.ref }}-${{ github.event_name }}
+  group: eggs-stage3-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
-  # ── Generate matrix ─────────────────────────────────────────────────────────
   matrix:
     name: Generate build matrix
     runs-on: ubuntu-24.04
@@ -42,7 +45,6 @@ jobs:
       matrix: ${{ steps.gen.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Generate matrix
         id: gen
         env:
@@ -59,7 +61,6 @@ jobs:
             | tee /tmp/matrix.json
           echo "matrix=$(cat /tmp/matrix.json)" >> "$GITHUB_OUTPUT"
 
-  # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: "${{ matrix.distro }}/${{ matrix.release }}/${{ matrix.arch }}"
     needs: matrix
@@ -68,7 +69,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -89,28 +89,23 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            debootstrap \
-            qemu-user-static \
-            binfmt-support \
-            curl \
-            git \
-            xz-utils \
-            zstd
+            debootstrap qemu-user-static binfmt-support \
+            curl git xz-utils zstd \
+            squashfs-tools xorriso isolinux syslinux-common mtools rsync
 
       - name: Register QEMU binfmt handlers
-        run: |
-          sudo update-binfmts --enable
-          ls /proc/sys/fs/binfmt_misc/ | grep -v register | grep -v status || true
+        run: sudo update-binfmts --enable
 
-      - name: Build stage3
+      - name: Build stage3 + install eggs + produce naked ISO
         env:
-          DISTRO:  ${{ matrix.distro }}
-          RELEASE: ${{ matrix.release }}
-          ARCH:    ${{ matrix.arch }}
-          JOBS:    "2"
-        run: sudo -E ./build.sh --distro "$DISTRO" --release "$RELEASE" --arch "$ARCH"
+          DISTRO:      ${{ matrix.distro }}
+          RELEASE:     ${{ matrix.release }}
+          ARCH:        ${{ matrix.arch }}
+          EGGS_BRANCH: all-features
+          SKIP_ISO:    ${{ github.event.inputs.skip_iso == 'true' && '1' || '0' }}
+        run: sudo -E ./build-naked.sh --distro "$DISTRO" --release "$RELEASE" --arch "$ARCH"
 
-      - name: Upload artifact
+      - name: Upload stage3 artifact
         uses: actions/upload-artifact@v4
         with:
           name: "${{ matrix.distro }}-stage3-${{ matrix.release }}-${{ matrix.arch }}"
@@ -120,7 +115,17 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # ── Release ─────────────────────────────────────────────────────────────────
+      - name: Upload naked ISO artifact
+        uses: actions/upload-artifact@v4
+        if: ${{ github.event.inputs.skip_iso != 'true' }}
+        with:
+          name: "${{ matrix.distro }}-naked-${{ matrix.release }}-${{ matrix.arch }}"
+          path: |
+            ${{ matrix.distro }}-${{ matrix.release }}-${{ matrix.arch }}-naked-*.iso
+            ${{ matrix.distro }}-${{ matrix.release }}-${{ matrix.arch }}-naked-*.iso.sha256
+          if-no-files-found: warn
+          retention-days: 7
+
   release:
     name: Create release
     needs: build
@@ -136,35 +141,39 @@ jobs:
           merge-multiple: true
 
       - name: List artifacts
-        run: find artifacts/ -name "*.tar.gz" | sort
+        run: find artifacts/ -type f | sort
 
       - name: Generate release tag
         id: tag
         run: |
-          TAG="stage3-$(date +%Y%m%d)"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "name=Linux Distro Stage3 $(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          echo "tag=eggs-stage3-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "name=penguins-eggs Stage3 $(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "artifacts/*.tar.gz,artifacts/*.sha256"
+          artifacts: "artifacts/*.tar.gz,artifacts/*.sha256,artifacts/*.iso"
           token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: false
           tag: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.name }}
           body: |
-            Automated stage3 tarballs for all supported distro/arch combinations.
+            penguins-eggs naked base images and stage3 tarballs for all supported distro/arch combinations.
 
-            Each tarball is a minimal bootable root filesystem containing:
-            - Compiler toolchain (gcc, binutils, make, cmake, ninja)
-            - Languages (python3, go)
-            - Build tools (autoconf, automake, bison, flex, patch)
-            - Essential utils (git, curl, sudo, util-linux, xz, zstd)
+            **Stage3 tarballs** — minimal root filesystems with compiler toolchain + penguins-eggs installed.
+
+            **Naked ISOs** — minimal live ISOs built with `eggs produce --naked`. Boot directly, then use `eggs produce` to create a custom ISO from the running system.
 
             **Verify integrity:**
             ```
             sha256sum -c {distro}_stage3_{release}_{arch}_{date}.tar.gz.sha256
+            sha256sum -c {distro}-{release}-{arch}-naked-{date}.iso.sha256
+            ```
+
+            **Use a naked ISO as a base:**
+            ```bash
+            # Boot the ISO, then customize and remaster:
+            sudo eggs produce --prefix my-custom-distro
             ```
           allowUpdates: true
           removeArtifacts: false

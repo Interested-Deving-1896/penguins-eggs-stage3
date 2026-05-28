@@ -1,10 +1,12 @@
-# linux-distro-stage3
+# penguins-eggs-stage3
 
-Distro-agnostic, architecture-agnostic Linux stage3 builder.
+Debian/Ubuntu/Devuan/Arch/Fedora/Alpine/Void/openSUSE/Gentoo stage3 builder with penguins-eggs integration.
 
-Produces minimal bootable root filesystem tarballs for any supported distro/arch combination. Each tarball contains a compiler toolchain, build tools, and essential utilities — nothing more.
+Extends [linux-distro-stage3](https://github.com/Interested-Deving-1896/linux-distro-stage3) with two additional steps:
+1. Install [penguins-eggs](https://github.com/Interested-Deving-1896/penguins-eggs) (`all-features` branch) into the stage3 rootfs
+2. Produce a **naked base ISO** with `eggs produce --naked`
 
-Forked from [chromiumos-stage3](https://github.com/Interested-Deving-1896/chromiumos-stage3) and generalized: the ChromiumOS-specific `cros_sdk`/Portage bootstrap is replaced with native distro tooling (`debootstrap`, `pacstrap`, `dnf`, `apk`, `xbps-install`, `zypper`, Gentoo stage3 tarballs).
+A naked base ISO is a minimal live image — kernel + initramfs + base system + penguins-eggs, no desktop. Boot it, add packages, then run `eggs produce` to remaster into a custom distro ISO.
 
 ## Supported distros and architectures
 
@@ -20,81 +22,68 @@ Forked from [chromiumos-stage3](https://github.com/Interested-Deving-1896/chromi
 | openSUSE (tumbleweed/15.6) | ✅ | ✅ | ✅ | — | ✅ | ✅ | — | ✅ |
 | Gentoo (rolling) | ✅ | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ |
 
-✅ Tier 1/2 — built in CI &nbsp; 🧪 Tier 3 — experimental, manual only &nbsp; — Not supported
-
-Cross-arch builds use QEMU `binfmt_misc` on an amd64 host.
+✅ Tier 1/2 — built in CI &nbsp; 🧪 Tier 3 — experimental &nbsp; — Not supported
 
 ## Usage
 
 ```bash
-# Build Debian trixie for amd64 (native)
-sudo ./build.sh --distro debian --release trixie --arch amd64
+# Full build: stage3 + eggs install + naked ISO
+sudo ./build-naked.sh --distro debian --release trixie --arch amd64
 
-# Build Alpine 3.21 for arm64 (cross via QEMU)
-sudo ./build.sh --distro alpine --release 3.21 --arch arm64
+# Stage3 + eggs install only (skip ISO production)
+sudo ./build-naked.sh --distro alpine --release 3.21 --arch arm64 --skip-iso
 
-# Build Devuan excalibur for riscv64
-sudo ./build.sh --distro devuan --release excalibur --arch riscv64
+# Stage3 only (no eggs)
+sudo ./build.sh --distro devuan --release excalibur --arch armhf
 ```
-
-Output: `{distro}_stage3_{release}_{arch}_{date}.tar.gz`
 
 ### Requirements
 
-- Root access
-- 10 GB free disk space per build
-- `curl`, `git`, `xz-utils`, `zstd`
-- For cross-arch: `qemu-user-static`, `binfmt-support`
-- Distro-specific: `debootstrap` (Debian/Ubuntu/Devuan), `pacstrap` (Arch), `dnf` (Fedora), `apk` (Alpine), `xbps-install` (Void), `zypper` (openSUSE)
+- Root access, 15 GB free disk space
+- `debootstrap`, `qemu-user-static`, `binfmt-support`, `squashfs-tools`, `xorriso`
 
-## Stage3 package set
+## Outputs
 
-Every stage3 tarball contains:
+| File | Description |
+|------|-------------|
+| `{distro}_stage3_{release}_{arch}_{date}.tar.gz` | Minimal rootfs + penguins-eggs |
+| `{distro}-{release}-{arch}-naked-{date}.iso` | Bootable naked base ISO |
+| `*.sha256` | SHA-256 checksums |
 
-| Category | Packages |
-|----------|----------|
-| Compiler | gcc, g++, binutils |
-| Build | make, cmake, ninja, autoconf, automake, libtool, pkg-config |
-| Languages | python3, pip, go |
-| Parse/gen | bison, flex, patch |
-| VCS/net | git, curl, wget |
-| System | sudo, util-linux, ca-certificates |
-| Compression | xz, zstd |
-| Filesystem | dosfstools |
-| Headers | linux-headers |
+## Naked base image workflow
 
-## CI
+```
+stage3 tarball
+    └── install penguins-eggs (all-features branch)
+        └── eggs config --nointeractive
+            └── eggs produce --naked
+                └── {distro}-{release}-{arch}-naked.iso
+                        └── boot → customize → eggs produce → custom ISO
+```
 
-GitHub Actions builds the tier 1 matrix (default release × amd64/arm64/armhf) weekly and on every push to `main`. Tier 2 arches build on schedule. Tier 3 is manual-only via `workflow_dispatch`.
+## Integration with penguins-eggs all-features
 
-Artifacts are published as GitHub Releases tagged `stage3-YYYYMMDD`.
+The `eggs stage3` command (added to the `all-features` branch) wraps this build pipeline:
 
-## Fork: penguins-eggs-stage3
+```bash
+# From a running penguins-eggs system:
+eggs stage3 --distro debian --release trixie --arch arm64
+```
 
-[penguins-eggs-stage3](https://github.com/Interested-Deving-1896/penguins-eggs-stage3) extends each stage3 with:
-- penguins-eggs installation
-- Naked base image builds (`eggs produce --naked`)
-- Integration with the penguins-eggs `all-features` branch
+See [integrations/plugins/build-infra/penguins-eggs-stage3/](https://github.com/Interested-Deving-1896/penguins-eggs/tree/all-features/integrations/plugins/build-infra/penguins-eggs-stage3) for the plugin source.
 
 ## Architecture
 
 ```
-linux-distro-stage3/
-├── build.sh                  # Main entry point
-├── distros/
-│   ├── debian.sh             # debootstrap bootstrap + package install
-│   ├── ubuntu.sh
-│   ├── devuan.sh
-│   ├── arch.sh               # pacstrap / Arch bootstrap tarball
-│   ├── fedora.sh             # dnf --installroot
-│   ├── alpine.sh             # apk-static
-│   ├── void.sh               # xbps-install
-│   ├── opensuse.sh           # zypper --root
-│   └── gentoo.sh             # official stage3 tarball + emerge
-├── config/
-│   └── matrix.yml            # distro × arch support matrix
-├── scripts/
-│   └── gen-matrix.py         # CI matrix generator
+penguins-eggs-stage3/
+├── build.sh                  # Stage3 builder (from linux-distro-stage3)
+├── build-naked.sh            # Orchestrator: stage3 → eggs install → naked ISO
+├── eggs/
+│   ├── install-eggs.sh       # Install penguins-eggs into rootfs
+│   └── naked-image.sh        # Run eggs produce --naked
+├── distros/                  # Per-distro bootstrap scripts
+├── config/matrix.yml         # Distro × arch support matrix
+├── scripts/gen-matrix.py     # CI matrix generator
 └── .github/workflows/
     └── build.yml             # CI: matrix build + release
 ```
