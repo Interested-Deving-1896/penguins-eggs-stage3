@@ -1,0 +1,170 @@
+name: Build Linux Distro Stage3
+
+on:
+  workflow_dispatch:
+    inputs:
+      distro:
+        description: "Distro (debian/ubuntu/devuan/arch/fedora/alpine/void/opensuse/gentoo)"
+        required: false
+        default: ""
+      arch:
+        description: "Architecture (amd64/arm64/armhf/riscv64/ppc64el/s390x/loong64/i386)"
+        required: false
+        default: ""
+      release:
+        description: "Release (distro-specific, e.g. trixie/noble/rolling/3.21)"
+        required: false
+        default: ""
+      tier:
+        description: "Max tier to build (1=stable only, 2=+weekly, 3=all)"
+        required: false
+        default: "1"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "AGENTS.md"
+      - "docs/**"
+  schedule:
+    # Tier 1 (stable) — weekly on Monday 02:00 UTC
+    - cron: "0 2 * * 1"
+
+concurrency:
+  group: stage3-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Generate matrix ─────────────────────────────────────────────────────────
+  matrix:
+    name: Generate build matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate matrix
+        id: gen
+        env:
+          INPUT_DISTRO:  ${{ github.event.inputs.distro }}
+          INPUT_ARCH:    ${{ github.event.inputs.arch }}
+          INPUT_RELEASE: ${{ github.event.inputs.release }}
+          INPUT_TIER:    ${{ github.event.inputs.tier || '1' }}
+        run: |
+          python3 scripts/gen-matrix.py \
+            --distro  "${INPUT_DISTRO:-}" \
+            --arch    "${INPUT_ARCH:-}" \
+            --release "${INPUT_RELEASE:-}" \
+            --tier    "${INPUT_TIER:-1}" \
+            | tee /tmp/matrix.json
+          echo "matrix=$(cat /tmp/matrix.json)" >> "$GITHUB_OUTPUT"
+
+  # ── Build ───────────────────────────────────────────────────────────────────
+  build:
+    name: "${{ matrix.distro }}/${{ matrix.release }}/${{ matrix.arch }}"
+    needs: matrix
+    runs-on: ubuntu-24.04
+    if: ${{ needs.matrix.outputs.matrix != '{"include":[]}' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Show available disk space
+        run: df -h
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            debootstrap \
+            qemu-user-static \
+            binfmt-support \
+            curl \
+            git \
+            xz-utils \
+            zstd
+
+      - name: Register QEMU binfmt handlers
+        run: |
+          sudo update-binfmts --enable
+          ls /proc/sys/fs/binfmt_misc/ | grep -v register | grep -v status || true
+
+      - name: Build stage3
+        env:
+          DISTRO:  ${{ matrix.distro }}
+          RELEASE: ${{ matrix.release }}
+          ARCH:    ${{ matrix.arch }}
+          JOBS:    "2"
+        run: sudo -E ./build.sh --distro "$DISTRO" --release "$RELEASE" --arch "$ARCH"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ matrix.distro }}-stage3-${{ matrix.release }}-${{ matrix.arch }}"
+          path: |
+            ${{ matrix.distro }}_stage3_${{ matrix.release }}_${{ matrix.arch }}_*.tar.gz
+            ${{ matrix.distro }}_stage3_${{ matrix.release }}_${{ matrix.arch }}_*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── Release ─────────────────────────────────────────────────────────────────
+  release:
+    name: Create release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts/ -name "*.tar.gz" | sort
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          TAG="stage3-$(date +%Y%m%d)"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "name=Linux Distro Stage3 $(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "artifacts/*.tar.gz,artifacts/*.sha256"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: false
+          tag: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.name }}
+          body: |
+            Automated stage3 tarballs for all supported distro/arch combinations.
+
+            Each tarball is a minimal bootable root filesystem containing:
+            - Compiler toolchain (gcc, binutils, make, cmake, ninja)
+            - Languages (python3, go)
+            - Build tools (autoconf, automake, bison, flex, patch)
+            - Essential utils (git, curl, sudo, util-linux, xz, zstd)
+
+            **Verify integrity:**
+            ```
+            sha256sum -c {distro}_stage3_{release}_{arch}_{date}.tar.gz.sha256
+            ```
+          allowUpdates: true
+          removeArtifacts: false

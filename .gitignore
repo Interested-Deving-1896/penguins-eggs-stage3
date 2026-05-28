@@ -1,0 +1,6 @@
+rootfs/
+*.tar.gz
+*.tar.gz.sha256
+/tmp/
+__pycache__/
+*.pyc
