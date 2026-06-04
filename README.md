@@ -1,30 +1,29 @@
+[update-readmes]   Mode: rewrite — migrating to template structure...
 # penguins-eggs-stage3
 
-Debian/Ubuntu/Devuan/Arch/Fedora/Alpine/Void/openSUSE/Gentoo stage3 builder with penguins-eggs integration.
+[![Built with Ona](https://ona.com/build-with-ona.svg)](https://app.ona.com/#https://github.com/Interested-Deving-1896/penguins-eggs-stage3)
 
-Extends [linux-distro-stage3](https://github.com/Interested-Deving-1896/linux-distro-stage3) with two additional steps:
-1. Install [penguins-eggs](https://github.com/Interested-Deving-1896/penguins-eggs) (`all-features` branch) into the stage3 rootfs
-2. Produce a **naked base ISO** with `eggs produce --naked`
+<!-- AI:start:what-it-does -->
+_Description pending._
+<!-- AI:end:what-it-does -->
 
-A naked base ISO is a minimal live image — kernel + initramfs + base system + penguins-eggs, no desktop. Boot it, add packages, then run `eggs produce` to remaster into a custom distro ISO.
+## Architecture
 
-## Supported distros and architectures
+<!-- AI:start:architecture -->
+_Architecture documentation pending._
+<!-- AI:end:architecture -->
 
-| Distro | amd64 | arm64 | armhf | riscv64 | ppc64el | s390x | loong64 | i386 |
-|--------|:-----:|:-----:|:-----:|:-------:|:-------:|:-----:|:-------:|:----:|
-| Debian (trixie/bookworm/sid) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧪 | ✅ |
-| Ubuntu (noble/jammy/oracular) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | 🧪 |
-| Devuan (excalibur/daedalus/ceres) | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | ✅ |
-| Arch Linux (rolling) | ✅ | ✅ | ✅ | 🧪 | — | — | — | 🧪 |
-| Fedora (42/41/rawhide) | ✅ | ✅ | ✅ | — | ✅ | ✅ | — | ✅ |
-| Alpine (3.21/3.20/edge) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧪 | ✅ |
-| Void Linux (rolling) | ✅ | ✅ | ✅ | — | ✅ | — | — | ✅ |
-| openSUSE (tumbleweed/15.6) | ✅ | ✅ | ✅ | — | ✅ | ✅ | — | ✅ |
-| Gentoo (rolling) | ✅ | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ |
+## Install
 
-✅ Tier 1/2 — built in CI &nbsp; 🧪 Tier 3 — experimental &nbsp; — Not supported
+<!-- Add installation instructions here. This section is yours — the AI will not modify it. -->
+
+```bash
+git clone https://github.com/Interested-Deving-1896/penguins-eggs-stage3.git
+cd penguins-eggs-stage3
+```
 
 ## Usage
+
 
 ```bash
 # Full build: stage3 + eggs install + naked ISO
@@ -42,48 +41,50 @@ sudo ./build.sh --distro devuan --release excalibur --arch armhf
 - Root access, 15 GB free disk space
 - `debootstrap`, `qemu-user-static`, `binfmt-support`, `squashfs-tools`, `xorriso`
 
-## Outputs
+## Configuration
 
-| File | Description |
-|------|-------------|
-| `{distro}_stage3_{release}_{arch}_{date}.tar.gz` | Minimal rootfs + penguins-eggs |
-| `{distro}-{release}-{arch}-naked-{date}.iso` | Bootable naked base ISO |
-| `*.sha256` | SHA-256 checksums |
+<!-- Document configuration options here. This section is yours — the AI will not modify it. -->
 
-## Naked base image workflow
+## CI
 
-```
-stage3 tarball
-    └── install penguins-eggs (all-features branch)
-        └── eggs config --nointeractive
-            └── eggs produce --naked
-                └── {distro}-{release}-{arch}-naked.iso
-                        └── boot → customize → eggs produce → custom ISO
-```
+<!-- AI:start:ci -->
+_CI documentation pending._
+<!-- AI:end:ci -->
 
-## Integration with penguins-eggs all-features
+## Mirror chain
 
-The `eggs stage3` command (added to the `all-features` branch) wraps this build pipeline:
-
-```bash
-# From a running penguins-eggs system:
-eggs stage3 --distro debian --release trixie --arch arm64
-```
-
-See [integrations/plugins/build-infra/penguins-eggs-stage3/](https://github.com/Interested-Deving-1896/penguins-eggs/tree/all-features/integrations/plugins/build-infra/penguins-eggs-stage3) for the plugin source.
-
-## Architecture
+<!-- AI:start:mirror-chain -->
+This repo is maintained in [`Interested-Deving-1896/penguins-eggs-stage3`](https://github.com/Interested-Deving-1896/penguins-eggs-stage3) and mirrored through:
 
 ```
-penguins-eggs-stage3/
-├── build.sh                  # Stage3 builder (from linux-distro-stage3)
-├── build-naked.sh            # Orchestrator: stage3 → eggs install → naked ISO
-├── eggs/
-│   ├── install-eggs.sh       # Install penguins-eggs into rootfs
-│   └── naked-image.sh        # Run eggs produce --naked
-├── distros/                  # Per-distro bootstrap scripts
-├── config/matrix.yml         # Distro × arch support matrix
-├── scripts/gen-matrix.py     # CI matrix generator
-└── .github/workflows/
-    └── build.yml             # CI: matrix build + release
+Interested-Deving-1896/penguins-eggs-stage3  ──►  OpenOS-Project-OSP/penguins-eggs-stage3  ──►  OpenOS-Project-Ecosystem-OOC/penguins-eggs-stage3
 ```
+
+Changes flow downstream automatically via the hourly mirror chain in
+[`fork-sync-all`](https://github.com/Interested-Deving-1896/fork-sync-all).
+Direct commits to OSP or OOC are detected and opened as PRs back to `Interested-Deving-1896`.
+<!-- AI:end:mirror-chain -->
+
+## Contributors
+
+<!-- AI:start:contributors -->
+_Contributors pending._
+<!-- AI:end:contributors -->
+
+## Origins
+
+<!-- AI:start:origins -->
+_Original project — no upstream fork._
+<!-- AI:end:origins -->
+
+## Resources
+
+<!-- AI:start:resources -->
+_No additional resource files found._
+<!-- AI:end:resources -->
+
+## License
+
+<!-- AI:start:license -->
+<!-- License not detected — add a LICENSE file to this repo. -->
+<!-- AI:end:license -->
