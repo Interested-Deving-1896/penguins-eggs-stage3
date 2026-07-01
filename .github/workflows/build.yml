@@ -91,7 +91,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             debootstrap qemu-user-static binfmt-support \
             curl git xz-utils zstd \
-            squashfs-tools xorriso isolinux syslinux-common mtools rsync
+            squashfs-tools xorriso isolinux syslinux-common mtools rsync \
+            python3-pip ninja-build
 
       - name: Register QEMU binfmt handlers
         run: sudo update-binfmts --enable
