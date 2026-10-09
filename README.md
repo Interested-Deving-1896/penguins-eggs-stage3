@@ -72,7 +72,7 @@ Direct commits to OSP or OOC are detected and opened as PRs back to `Interested-
 <!-- AI:start:contributors -->
 | Contributor | Commits |
 |---|---|
-| [@Interested-Deving-1896](https://github.com/Interested-Deving-1896) | 14 |
+| [@Interested-Deving-1896](https://github.com/Interested-Deving-1896) | 102 |
 <!-- AI:end:contributors -->
 
 ## Origins
@@ -107,5 +107,5 @@ for the underlying accessibility reference.
 ## License
 
 <!-- AI:start:license -->
-<!-- License not detected — add a LICENSE file to this repo. -->
+[GPL-3.0](https://github.com/Interested-Deving-1896/penguins-eggs-stage3/blob/main/LICENSE) © 2026 [Interested-Deving-1896](https://github.com/Interested-Deving-1896)
 <!-- AI:end:license -->
