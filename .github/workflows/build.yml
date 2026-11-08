@@ -107,7 +107,7 @@ jobs:
         run: sudo -E ./build-naked.sh --distro "$DISTRO" --release "$RELEASE" --arch "$ARCH"
 
       - name: Upload stage3 artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: "${{ matrix.distro }}-stage3-${{ matrix.release }}-${{ matrix.arch }}"
           path: |
@@ -117,7 +117,7 @@ jobs:
           retention-days: 7
 
       - name: Upload naked ISO artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: ${{ github.event.inputs.skip_iso != 'true' }}
         with:
           name: "${{ matrix.distro }}-naked-${{ matrix.release }}-${{ matrix.arch }}"
